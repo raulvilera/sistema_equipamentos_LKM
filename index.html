@@ -1039,15 +1039,17 @@
             <h2 style="margin-bottom: 30px; color: var(--primary-color);">Sistema de Gestão de Equipamentos</h2>
             <div class="form-group">
                 <label for="loginEmail">E-mail Institucional</label>
-                <input type="email" id="loginEmail" class="form-control" placeholder="seu.email@escola.gov.br" value="admin@escola.gov.br">
+                <input type="email" id="loginEmail" class="form-control" placeholder="seu.email@escola.gov.br" autocomplete="username">
             </div>
             <div class="form-group">
                 <label for="loginPassword">Senha</label>
-                <input type="password" id="loginPassword" class="form-control" value="admin123">
+                <input type="password" id="loginPassword" class="form-control" placeholder="Digite sua senha" autocomplete="current-password" onkeydown="if(event.key==='Enter') login()">
             </div>
             <div class="btn-group" style="justify-content: center;">
                 <button id="loginBtn" class="btn btn-primary" onclick="login()">Entrar</button>
             </div>
+            <p id="loginError" style="color:#c0392b; margin-top:15px; display:none;"></p>
+            <p style="margin-top:15px;"><a href="#" onclick="resetPassword(); return false;">Esqueci minha senha</a></p>
         </div>
     </div>
 
@@ -2475,7 +2477,7 @@
             "CHROMEBOOK": EQUIPAMENTOS.CHROMEBOOK,
             "NOTEBOOK": EQUIPAMENTOS.NOTEBOOK,
             "SMARTPHONE": EQUIPAMENTOS.SMARTPHONE,
-            "TABLET": EQUIPAMENTOS.TABLET,
+            "TABLET": EQUIPAMENTOS.TABLETS,
             "HEAD SET": [],
             "CAIXA DE SOM": []
         };
@@ -2607,29 +2609,84 @@
             updateRegistrosTable();
         });
 
-        // Funções de autenticação
-        function login() {
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
-            
-            // Simulação de login
-            if (email === 'admin@escola.gov.br' && password === 'admin123') {
+        // ===== Autenticação com Firebase =====
+        // Cole aqui a configuração do seu projeto (Console do Firebase >
+        // Configurações do projeto > Seus apps > Configuração do SDK).
+        const firebaseConfig = {
+            apiKey: "COLE_AQUI",
+            authDomain: "COLE_AQUI.firebaseapp.com",
+            projectId: "COLE_AQUI",
+            appId: "COLE_AQUI"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        function showLoginError(msg) {
+            const el = document.getElementById('loginError');
+            el.textContent = msg;
+            el.style.display = msg ? 'block' : 'none';
+        }
+
+        // Mostra o sistema só para quem está autenticado
+        auth.onAuthStateChanged(function(user) {
+            if (user) {
+                currentUser = user;
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('mainSystem').style.display = 'block';
-                document.getElementById('currentUser').textContent = 'Administrador';
-                
-                // Atualiza dashboard
+                document.getElementById('currentUser').textContent = user.email;
                 updateDashboard();
             } else {
-                alert('Credenciais inválidas. Use admin@escola.gov.br e admin123');
+                currentUser = null;
+                document.getElementById('mainSystem').style.display = 'none';
+                document.getElementById('loginScreen').style.display = 'block';
             }
+        });
+
+        function login() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            showLoginError('');
+            if (!email || !password) {
+                showLoginError('Informe e-mail e senha.');
+                return;
+            }
+            const btn = document.getElementById('loginBtn');
+            btn.disabled = true;
+            btn.textContent = 'Entrando...';
+            auth.signInWithEmailAndPassword(email, password)
+                .catch(function(err) {
+                    const msgs = {
+                        'auth/invalid-email': 'E-mail inválido.',
+                        'auth/user-disabled': 'Este usuário foi desativado.',
+                        'auth/user-not-found': 'E-mail ou senha incorretos.',
+                        'auth/wrong-password': 'E-mail ou senha incorretos.',
+                        'auth/invalid-credential': 'E-mail ou senha incorretos.',
+                        'auth/invalid-login-credentials': 'E-mail ou senha incorretos.',
+                        'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos.',
+                        'auth/network-request-failed': 'Sem conexão com a internet.'
+                    };
+                    showLoginError(msgs[err.code] || ('Erro ao entrar: ' + err.message));
+                })
+                .finally(function() {
+                    btn.disabled = false;
+                    btn.textContent = 'Entrar';
+                    document.getElementById('loginPassword').value = '';
+                });
+        }
+
+        function resetPassword() {
+            const email = document.getElementById('loginEmail').value.trim();
+            if (!email) {
+                showLoginError('Digite seu e-mail acima e clique novamente em "Esqueci minha senha".');
+                return;
+            }
+            auth.sendPasswordResetEmail(email)
+                .then(function() { showLoginError(''); alert('Enviamos um link de redefinição de senha para ' + email + '.'); })
+                .catch(function() { showLoginError('Não foi possível enviar o e-mail de redefinição.'); });
         }
 
         function logout() {
-            document.getElementById('mainSystem').style.display = 'none';
-            document.getElementById('loginScreen').style.display = 'block';
-            document.getElementById('loginEmail').value = 'admin@escola.gov.br';
-            document.getElementById('loginPassword').value = 'admin123';
+            auth.signOut();
         }
 
         // Funções para navegação entre abas
@@ -4059,7 +4116,7 @@ Data: ${formatDate(reserve.date)}`);
                     row.innerHTML = `
                         <td>${eq.id}</td>
                         <td>${tipo}</td>
-                        <td>${eq.serial</td>
+                        <td>${eq.serial}</td>
                         <td>
                             <span class="badge ${getStatusBadgeClass(eq.status)}">
                                 ${eq.status}
