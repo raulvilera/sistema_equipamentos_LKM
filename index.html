@@ -2710,7 +2710,9 @@
             }
             sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname })
                 .then(function(r) {
-                    if (r.error) showLoginError('Não foi possível enviar o e-mail de redefinição.');
+                    if (r.error) showLoginError(/rate limit|after \d+ seconds/i.test(r.error.message)
+                        ? 'Limite de envio de e-mails atingido. Tente de novo daqui a uma hora (clique só uma vez).'
+                        : 'Não foi possível enviar o e-mail de redefinição.');
                     else { showLoginError(''); alert('Se o e-mail estiver cadastrado, enviamos um link para ' + email + '.'); }
                 });
         }
