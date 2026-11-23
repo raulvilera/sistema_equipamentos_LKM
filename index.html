@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Gestão de Equipamentos Tecnológicos</title>
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -2609,17 +2607,11 @@
             updateRegistrosTable();
         });
 
-        // ===== Autenticação com Firebase =====
-        // Cole aqui a configuração do seu projeto (Console do Firebase >
-        // Configurações do projeto > Seus apps > Configuração do SDK).
-        const firebaseConfig = {
-            apiKey: "COLE_AQUI",
-            authDomain: "COLE_AQUI.firebaseapp.com",
-            projectId: "COLE_AQUI",
-            appId: "COLE_AQUI"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
+        // ===== Autenticação com Supabase =====
+        // A chave publicável (anon/publishable) pode ficar no site; ela não dá acesso de administrador.
+        const SUPABASE_URL = "https://dgdashmtdudlhqbpkupu.supabase.co";
+        const SUPABASE_KEY = "COLE_AQUI_A_CHAVE_PUBLICAVEL";
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         function showLoginError(msg) {
             const el = document.getElementById('loginError');
@@ -2628,7 +2620,16 @@
         }
 
         // Mostra o sistema só para quem está autenticado
-        auth.onAuthStateChanged(function(user) {
+        sb.auth.onAuthStateChange(function(event, session) {
+            const user = session ? session.user : null;
+            if (event === 'PASSWORD_RECOVERY') {
+                const nova = prompt('Digite a nova senha (mínimo 8 caracteres):');
+                if (nova && nova.length >= 8) {
+                    sb.auth.updateUser({ password: nova }).then(function(r) {
+                        alert(r.error ? 'Não foi possível alterar a senha: ' + r.error.message : 'Senha alterada com sucesso.');
+                    });
+                }
+            }
             if (user) {
                 currentUser = user;
                 document.getElementById('loginScreen').style.display = 'none';
@@ -2653,20 +2654,16 @@
             const btn = document.getElementById('loginBtn');
             btn.disabled = true;
             btn.textContent = 'Entrando...';
-            auth.signInWithEmailAndPassword(email, password)
-                .catch(function(err) {
-                    const msgs = {
-                        'auth/invalid-email': 'E-mail inválido.',
-                        'auth/user-disabled': 'Este usuário foi desativado.',
-                        'auth/user-not-found': 'E-mail ou senha incorretos.',
-                        'auth/wrong-password': 'E-mail ou senha incorretos.',
-                        'auth/invalid-credential': 'E-mail ou senha incorretos.',
-                        'auth/invalid-login-credentials': 'E-mail ou senha incorretos.',
-                        'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos.',
-                        'auth/network-request-failed': 'Sem conexão com a internet.'
-                    };
-                    showLoginError(msgs[err.code] || ('Erro ao entrar: ' + err.message));
+            sb.auth.signInWithPassword({ email: email, password: password })
+                .then(function(r) {
+                    if (!r.error) return;
+                    const m = r.error.message || '';
+                    if (/Invalid login credentials/i.test(m)) showLoginError('E-mail ou senha incorretos.');
+                    else if (/Email not confirmed/i.test(m)) showLoginError('E-mail ainda não confirmado.');
+                    else if (/rate limit|too many/i.test(m)) showLoginError('Muitas tentativas. Aguarde alguns minutos.');
+                    else showLoginError('Erro ao entrar: ' + m);
                 })
+                .catch(function() { showLoginError('Sem conexão com o servidor.'); })
                 .finally(function() {
                     btn.disabled = false;
                     btn.textContent = 'Entrar';
@@ -2680,13 +2677,15 @@
                 showLoginError('Digite seu e-mail acima e clique novamente em "Esqueci minha senha".');
                 return;
             }
-            auth.sendPasswordResetEmail(email)
-                .then(function() { showLoginError(''); alert('Enviamos um link de redefinição de senha para ' + email + '.'); })
-                .catch(function() { showLoginError('Não foi possível enviar o e-mail de redefinição.'); });
+            sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname })
+                .then(function(r) {
+                    if (r.error) showLoginError('Não foi possível enviar o e-mail de redefinição.');
+                    else { showLoginError(''); alert('Se o e-mail estiver cadastrado, enviamos um link para ' + email + '.'); }
+                });
         }
 
         function logout() {
-            auth.signOut();
+            sb.auth.signOut();
         }
 
         // Funções para navegação entre abas
